@@ -31,7 +31,11 @@ const int SD_SCK = 18;
 
 File dataFile;
 
-int i = 0;
+float AngleX = 0;
+float AngleY = 0;
+float AngleZ = 0;
+
+unsigned long last_ms_imu = 0;
 
 void setup() {
   Wire.begin(21, 22);
@@ -39,8 +43,8 @@ void setup() {
   Serial.begin(115200);
 
   beginMPU();
-  beginSD();
-  
+  //beginSD();
+  beginBmp();
 
   // 2. 태스크 생성 시 핸들러 주소(&myTaskHandle) 전달
   xTaskCreatePinnedToCore(
@@ -69,7 +73,9 @@ void sensoringTask(void *pvParameters) {
       // --- 임계 구역 (Critical Section) 시작 ---
       updateMPUData();
       altitude = bmp.readAltitude(seaLevelPressure) - height_ini;
-      saveToSD();
+      Serial.print("Alt:");
+      Serial.println(altitude);
+      //saveToSD();
       // --- 임계 구역 끝 ---
       xSemaphoreGive(xMutex); // 뮤텍스 반납
       delay(50);
@@ -120,6 +126,18 @@ void updateMPUData(){
   MPUAddr->GyX = GyX / 16.4f;
   MPUAddr->GyY = GyY / 16.4f;
   MPUAddr->GyZ = GyZ / 16.4f;
+
+  unsigned long curr_ms = millis();
+  AngleX += MPUAddr->GyX * (curr_ms - last_ms_imu) / 1000.0f;
+  AngleY += MPUAddr->GyY * (curr_ms - last_ms_imu) / 1000.0f;
+  AngleZ += MPUAddr->GyZ * (curr_ms - last_ms_imu) / 1000.0f;
+
+  Serial.print(AngleX);
+  Serial.print(",");
+  Serial.print(AngleY);
+  Serial.print(",");
+  Serial.print(AngleZ);
+  Serial.print("\n");
 
 }
 #pragma endregion
