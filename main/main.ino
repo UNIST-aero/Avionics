@@ -1,6 +1,8 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
+#include <Servo.h>
+#include <math.h>
 #include <Adafruit_BMP280.h>
 
 struct MPUData{
@@ -12,6 +14,8 @@ struct MPUData{
   float GyY;
   float GyZ;
 };
+
+Servo servo;
 
 const int MPU_ADDR = 0x68;
 // 1. 태스크 핸들러 변수 선언
@@ -37,14 +41,26 @@ float AngleZ = 0;
 
 unsigned long last_ms_imu = 0;
 
+const float LAUNCH_THERSHOLD = 50;
+const int SERVO_PIN = 14;
+const float FALL_MARGIN = 5;
+const int COUNT_LIMIT = 3;
+
+float maxHeight = 0;
+int fallCount = 0;
+bool isLaunched = false;
+bool isDeployed = false;
+
 void setup() {
   Wire.begin(21, 22);
   xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
 
   beginMPU();
-  //beginSD();
+  beginSD();
   beginBmp();
+  servo.attach(SERVO_PIN);
+  servo.write(0);
 
   // 2. 태스크 생성 시 핸들러 주소(&myTaskHandle) 전달
   xTaskCreatePinnedToCore(
@@ -61,10 +77,52 @@ void setup() {
 void loop() {
   if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
     // --- 임계 구역 (Critical Section) 시작 ---
-    
+    checklaunch(altitude);
+    float g = sqrt(
+      MPUAddr->AcX * MPUAddr->AcX +
+      MPUAddr->AcY * MPUAddr->AcY +
+      MPUAddr->AcZ * MPUAddr->AcZ
+    );
+    if (checkHeight(altitude, g) && isLaunched && !isDeployed){
+      Deploy();
+    }
     // --- 임계 구역 끝 ---
     xSemaphoreGive(xMutex); // 뮤텍스 반납
   }
+}
+
+void checklaunch(float h) {
+  if(!isLaunched && h > LAUNCH_THERSHOLD) {
+    isLaunched = true;
+  }
+}
+
+bool checkHeight(float h, float g) {
+  if(h > maxHeight) {
+    maxHeight = h;
+    fallCount = 0;
+    return false;
+  }
+  if((g < 5) || (maxHeight - h) > FALL_MARGIN) {
+    fallCount++;
+  } else {
+    fallCount = 0;
+  }
+
+  if(fallCount >= COUNT_LIMIT) {
+    return true;
+  }
+  return false;
+}
+
+void Deploy() {
+  for(int i = 0; i<10; i++) {
+    servo.write(90);
+    delay(300);
+    servo.write(10);
+    delay(300);
+  }
+  isDeployed = true;
 }
 
 void sensoringTask(void *pvParameters) {
@@ -75,7 +133,7 @@ void sensoringTask(void *pvParameters) {
       altitude = bmp.readAltitude(seaLevelPressure) - height_ini;
       Serial.print("Alt:");
       Serial.println(altitude);
-      //saveToSD();
+      saveToSD();
       // --- 임계 구역 끝 ---
       xSemaphoreGive(xMutex); // 뮤텍스 반납
       delay(50);
@@ -86,19 +144,28 @@ void sensoringTask(void *pvParameters) {
 
 #pragma region MPU6050
 void beginMPU(){
+  // Wake up
   Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x6B); 
-  Wire.write(0);  
-  // 가속도 설정 레지스터
-  Wire.write(0x1C); 
-  Wire.write(0x18); // 0x18 = +/- 16g
-  // 자이로 설정 레지스터
-  Wire.write(0x1B); 
-  Wire.write(0x18); // 0x18 = +/- 2000 deg/s
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+
+  // Accel
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x1C);
+  Wire.write(0x18);
+  Wire.endTransmission(true);
+
+  // Gyro
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x1B);
+  Wire.write(0x18);
   Wire.endTransmission(true);
 
   MPUAddr = new struct MPUData();//(struct MPUData*)malloc()
   Serial.println("MPU Start");
+
+  last_ms_imu = millis();
 }
 
 void updateMPUData(){
@@ -131,6 +198,7 @@ void updateMPUData(){
   AngleX += MPUAddr->GyX * (curr_ms - last_ms_imu) / 1000.0f;
   AngleY += MPUAddr->GyY * (curr_ms - last_ms_imu) / 1000.0f;
   AngleZ += MPUAddr->GyZ * (curr_ms - last_ms_imu) / 1000.0f;
+  last_ms_imu = curr_ms;
 
   Serial.print(AngleX);
   Serial.print(",");
@@ -171,7 +239,7 @@ void saveToSD() {
     dataFile.print(MPUAddr->GyX); dataFile.print(",");
     dataFile.print(MPUAddr->GyY); dataFile.print(",");
     dataFile.print(MPUAddr->GyZ); dataFile.print(",");
-    dataFile.println(MPUAddr->Tmp); dataFile.print(",");
+    dataFile.print(MPUAddr->Tmp); dataFile.print(",");
     dataFile.println(altitude);
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
