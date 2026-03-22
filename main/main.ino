@@ -41,6 +41,7 @@ const int CS = 5;
 const int SD_MOSI = 23;
 const int SD_MISO = 19;
 const int SD_SCK = 18;
+char filename[20];
 
 // SD 카드에 저장할 파일 저장
 File dataFile;
@@ -93,15 +94,15 @@ void loop() {
     // --- 임계 구역 (Critical Section) 시작 ---
 
     updateMPUData();
-    altitude = bmp.readAltitude(seaLevelPressure) - height_ini;
+    altitude = bmp.readAltitude(seaLevelPressure);
 
-    checklaunch(altitude); // 발사 여부 판정
+    checklaunch(altitude - height_ini); // 발사 여부 판정
     float g = sqrt(
       MPUAddr->AcX * MPUAddr->AcX +
       MPUAddr->AcY * MPUAddr->AcY +
       MPUAddr->AcZ * MPUAddr->AcZ
     ); // g 단위로 현재 총 가속도
-    if (checkHeight(altitude, g) && isLaunched && !isDeployed){ // 발사 이후, --번 이상의 추락 감지 시 사출
+    if (checkHeight(altitude - height_ini, g) && isLaunched && !isDeployed){ // 발사 이후, --번 이상의 추락 감지 시 사출
       Deploy();
     }
     // --- 임계 구역 끝 ---
@@ -149,13 +150,13 @@ void Deploy() {
 // 데이터 로깅 멀티스레딩
 void loggingTask(void *pvParameters) {
   while(1) {
-    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+    //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       // --- 임계 구역 (Critical Section) 시작 ---
       saveToSD();
       // --- 임계 구역 끝 ---
-      xSemaphoreGive(xMutex); // 뮤텍스 반납
-      delay(50);
-    }
+      //xSemaphoreGive(xMutex); // 뮤텍스 반납
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+    //}
 
   }
 }
@@ -237,18 +238,23 @@ void beginSD(){
     while (1); //연결 안 될 경우
   }
 
-  if (SD.exists("/data.csv")) {
-    SD.remove("/data.csv"); // 기존 파일 삭제 (매번 새 파일을 만들고 싶을 때)
-    Serial.println("Existing data.csv removed.");
+  int fileIndex = 1;
+  while (true) {
+    sprintf(filename, "/data%d.csv", fileIndex);
+    if (!SD.exists(filename)) {
+      break;
+    }
+    fileIndex++;
   }
 
-  dataFile = SD.open("/data.csv", FILE_APPEND);
+  dataFile = SD.open(filename, FILE_WRITE);
+  dataFile.print("AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed\n");
   Serial.println("SD Start");
 }
 
 void saveToSD() {
   if (!dataFile) {
-    dataFile = SD.open("/data.csv", FILE_APPEND);
+    dataFile = SD.open(filename, FILE_APPEND);
   }
 
   if (dataFile) {
@@ -259,7 +265,10 @@ void saveToSD() {
     dataFile.print(MPUAddr->GyY); dataFile.print(",");
     dataFile.print(MPUAddr->GyZ); dataFile.print(",");
     dataFile.print(MPUAddr->Tmp); dataFile.print(",");
-    dataFile.println(altitude);
+    dataFile.print(altitude); dataFile.print(",");
+    dataFile.print(altitude - height_ini); dataFile.print(",");
+    dataFile.print(isLaunched); dataFile.print(",");
+    dataFile.print(isDeployed); dataFile.print("\n");
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
     if (++count >= 10) {
