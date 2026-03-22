@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
-#include <Servo.h>
+#include <ESP32Servo.h>
 #include <math.h>
 #include <Adafruit_BMP280.h>
 
