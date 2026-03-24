@@ -17,25 +17,31 @@ struct MPUData{
   float GyY;
   float GyZ;
 };
-
-// 서보 모터 정의
-Servo servo;
-const int SERVO_PIN = 14;
-
 // MPU6050 기본 I2C 주소
 const int MPU_ADDR = 0x68;
 
+#pragma region Servo
+// 서보 모터 정의
+Servo servo;
+const int SERVO_PIN = 25;
+#pragma endregion
+
+#pragma region Task
 // 1. 태스크 핸들러 변수 선언
 TaskHandle_t TaskHandle;
-SemaphoreHandle_t xMutex;
+//emaphoreHandle_t xMutex;
 struct MPUData* MPUAddr = nullptr;
+#pragma endregion
 
+#pragma region Bmp
 // 기압고도계 및 해수면 기압 정의
 Adafruit_BMP280 bmp;
 float seaLevelPressure = 1019.6; // 기상청 참고해서 그때의 해면기압 넣기
 float altitude; // 현재 해수면 기준 고도
 float height_ini;
+#pragma endregion
 
+#pragma region SDData
 // SD 카드 핀 정의
 const int CS = 5;
 const int SD_MOSI = 23;
@@ -45,6 +51,12 @@ char filename[20];
 
 // SD 카드에 저장할 파일 저장
 File dataFile;
+
+// 데이터 저장을 위한 큐 핸들
+QueueHandle_t sdQueue;
+
+const int msgSize = 50;
+#pragma endregion
 
 // 현재 기체의 각도 (자이로 센서 적분 기준)
 float AngleX = 0;
@@ -63,17 +75,28 @@ int fallCount = 0; // 추락 감지 횟수
 bool isLaunched = false; // 발사 여부
 bool isDeployed = false; // 사출 여부
 
+// 부저 핀 정의
+const int buzzerPin = 27;
+
 // 시작 코드
 void setup() {
   Wire.begin(21, 22);
-  xMutex = xSemaphoreCreateMutex();
+  //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
+  sdQueue = xQueueCreate(10, msgSize);
+  
+  servo.attach(SERVO_PIN);
+  servo.write(90); 
+
+  /*ledcAttach(buzzerPin, 1000, 8);
+  ledcWriteTone(buzzerPin, 1000);
+  delay(200);
+  ledcWriteTone(buzzerPin, 0);
+  delay(200);*/
 
   beginMPU();
   beginSD();
   beginBmp();
-  servo.attach(SERVO_PIN);
-  servo.write(0);
 
   height_ini = bmp.readAltitude(seaLevelPressure);
 
@@ -90,9 +113,8 @@ void setup() {
 }
 
 void loop() {
-  if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+  //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
     // --- 임계 구역 (Critical Section) 시작 ---
-
     updateMPUData();
     altitude = bmp.readAltitude(seaLevelPressure);
 
@@ -106,35 +128,10 @@ void loop() {
       Deploy();
     }
     // --- 임계 구역 끝 ---
-    xSemaphoreGive(xMutex); // 뮤텍스 반납
-  }
+    //xSemaphoreGive(xMutex); // 뮤텍스 반납
+  //}
 }
 
-// 발사 감지
-void checklaunch(float h) {
-  if(!isLaunched && (h > LAUNCH_THRESHOLD)) {
-    isLaunched = true;
-  }
-}
-
-// 추락 감지
-bool checkHeight(float h, float g) {
-  if(h > maxHeight) {
-    maxHeight = h;
-    fallCount = 0;
-    return false;
-  }
-  if((g < 5) || (maxHeight - h) > FALL_MARGIN) {
-    fallCount++;
-  } else {
-    fallCount = 0;
-  }
-
-  if(fallCount >= COUNT_LIMIT) {
-    return true;
-  }
-  return false;
-}
 
 // 사출
 void Deploy() {
@@ -248,7 +245,7 @@ void beginSD(){
   }
 
   dataFile = SD.open(filename, FILE_WRITE);
-  dataFile.print("AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed\n");
+  dataFile.print("Timestamp(ms),AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed\n");
   Serial.println("SD Start");
 }
 
@@ -258,6 +255,7 @@ void saveToSD() {
   }
 
   if (dataFile) {
+    dataFile.print(millis()); dataFile.print(",");
     dataFile.print(MPUAddr->AcX); dataFile.print(",");
     dataFile.print(MPUAddr->AcY); dataFile.print(",");
     dataFile.print(MPUAddr->AcZ); dataFile.print(",");
@@ -278,7 +276,6 @@ void saveToSD() {
   }
 }
 #pragma endregion
-
 
 #pragma region Bmp
 void beginBmp(){
@@ -304,9 +301,30 @@ void beginBmp(){
 }
 #pragma endregion
 
-
 #pragma region Utility
+// 발사 감지
+void checklaunch(float h) {
+  if(!isLaunched && (h > LAUNCH_THRESHOLD)) {
+    isLaunched = true;
+  }
+}
 
+// 추락 감지
+bool checkHeight(float h, float g) {
+  if(h > maxHeight) {
+    maxHeight = h;
+    fallCount = 0;
+    return false;
+  }
+  if((g < 5) || (maxHeight - h) > FALL_MARGIN) {
+    fallCount++;
+  } else {
+    fallCount = 0;
+  }
 
-
+  if(fallCount >= COUNT_LIMIT) {
+    return true;
+  }
+  return false;
+}
 #pragma endregion
