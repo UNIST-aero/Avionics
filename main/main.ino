@@ -66,9 +66,9 @@ float AngleZ = 0;
 // 마지막으로 IMU에서 값을 불러온 시점(millis 기준)
 unsigned long last_ms_imu = 0;
 
-const float LAUNCH_THRESHOLD = 50; // 사출 기준 고도 (m)
-const float FALL_MARGIN = 5; // 최고 고도 기준 추락 허용 고도 (m) -> 최고 고도 기준 --m 이상 하강 시 사출 조건 충족
-const int COUNT_LIMIT = 3; // 최고 고도 기준 추락이 --번 감지되면 사출 조건 충족
+const float LAUNCH_THRESHOLD = 5; // 사출 기준 고도 (m, 원래 값 : 50)
+const float FALL_MARGIN = 1; // 최고 고도 기준 추락 허용 고도 (m, 원래 값 : 5) -> 최고 고도 기준 --m 이상 하강 시 사출 조건 충족
+const int COUNT_LIMIT = 3; // 최고 고도 기준 추락이 --번 감지되면 사출 조건 충족(원래 값 : 3)
 
 float maxHeight = 0; // 최고 도달 고도 (m)
 int fallCount = 0; // 추락 감지 횟수
@@ -135,10 +135,10 @@ void loop() {
 
 // 사출
 void Deploy() {
-  for(int i = 0; i<10; i++) {
-    servo.write(90);
+  for(int i = 0; i<3; i++) {
+    servo.write(0);
     delay(300);
-    servo.write(10);
+    servo.write(90);
     delay(300);
   }
   isDeployed = true;
@@ -316,7 +316,7 @@ bool checkHeight(float h, float g) {
     fallCount = 0;
     return false;
   }
-  if((g < 5) || (maxHeight - h) > FALL_MARGIN) {
+  if((maxHeight - h) > FALL_MARGIN) {
     fallCount++;
   } else {
     fallCount = 0;
