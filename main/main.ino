@@ -104,7 +104,7 @@ void setup() {
   Wire.begin(21, 22);
   //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
-  sdQueue = xQueueCreate(20, sizeof(LogData));
+  sdQueue = xQueueCreate(20, sizeof(LogData)); //20 보다 크게 하는게 좋을 것 같긴 함. flush가 큰 부하를 주기 때문에, 큐가 넘칠 수도?
   
   servo.attach(SERVO_PIN);
   servo.write(90); 
@@ -278,7 +278,6 @@ void updateMPUData(){
   Serial.print(",");
   Serial.print(AngleZ);
   Serial.print("\n");
-
 }
 #pragma endregion
 
@@ -324,6 +323,9 @@ void saveToSD(LogData data) {
     dataFile.print(data.isDeployed); dataFile.print(",");
     dataFile.print(data.Buzzer1); dataFile.print(",");
     dataFile.print(data.Buzzer2); dataFile.print("\n");
+
+    // 저장을 최적화하고 싶을 경우, 위 방식 대신 아래처럼 바이너리로 저장, 컴퓨터에서 복구 
+    //dataFile.write((const uint8_t*)&data, sizeof(data));
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
     if (++count >= 10) {
