@@ -285,14 +285,14 @@ void updateMPUData(){
 #pragma region SD
 void beginSD(){
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, CS);
-  if (!SD.begin(CS, SPI, 3000000)) { // ESP32는 40MHz까지 안정적
+  if (!SD.begin(CS, SPI, 30000000)) { // ESP32는 40MHz까지 안정적
     Serial.println("SD Init Failed");
     while (1); //연결 안 될 경우
   }
 
   int fileIndex = 1;
   while (true) {
-    sprintf(filename, "/data%d.csv", fileIndex);
+    sprintf(filename, "/data%d.bin", fileIndex);
     if (!SD.exists(filename)) {
       break;
     }
@@ -300,7 +300,6 @@ void beginSD(){
   }
 
   dataFile = SD.open(filename, FILE_WRITE);
-  dataFile.print("Timestamp(ms),AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed,Buzzer1,Buzzer2\n");
   Serial.println("SD Start");
 }
 
