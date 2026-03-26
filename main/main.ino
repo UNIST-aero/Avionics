@@ -72,7 +72,7 @@ unsigned long last_ms_imu = 0;
 
 const float LAUNCH_THRESHOLD = 35; // 사출 기준 고도 (m, 원래 값 : 35)
 const float FALL_MARGIN = 7; // 최고 고도 기준 추락 허용 고도 (m, 원래 값 : 7) -> 최고 고도 기준 --m 이상 하강 시 사출 조건 충족
-const int COUNT_LIMIT = 3; // 최고 고도 기준 추락이 --번 감지되면 사출 조건 충족(원래 값 : 3)
+const int COUNT_LIMIT = 50; // 최고 고도 기준 추락이 --번 감지되면 사출 조건 충족(원래 값 : 200)
 
 float maxHeight = 0; // 최고 도달 고도 (m)
 int fallCount = 0; // 추락 감지 횟수
@@ -136,12 +136,18 @@ void loop() {
       MPUAddr->AcY * MPUAddr->AcY +
       MPUAddr->AcZ * MPUAddr->AcZ
     ); // g 단위로 현재 총 가속도
+    if(!isLaunched) {
+      ledcWriteTone(speakerPin, 261);
+      delay(100);
+      ledcWriteTone(speakerPin, 0);
+      delay(1000);
+    }
     if(isLaunched && !Buzzer1) {
+      Buzzer1 = true;
       ledcWriteTone(speakerPin, 261);
       delay(1000);
       ledcWriteTone(speakerPin,0);
       delay(500);
-      Buzzer1 = true;
     }
     if (checkHeight(altitude - height_ini, g) && isLaunched && !isDeployed){ // 발사 이후, --번 이상의 추락 감지 시 사출
       Deploy();
@@ -154,18 +160,18 @@ void loop() {
 
 // 사출
 void Deploy() {
-  ledcWriteTone(speakerPin, 261);
-  delay(1000);
-  ledcWriteTone(speakerPin,0);
-  delay(500);
-  
+  isDeployed = true;
+  Buzzer2 = true;
   for(int i = 0; i<3; i++) {
     servo.write(0);
     delay(300);
     servo.write(90);
     delay(300);
   }
-  isDeployed = true;
+  ledcWriteTone(speakerPin, 261);
+  delay(1000);
+  ledcWriteTone(speakerPin,0);
+  delay(500);
 }
 
 // 데이터 로깅 멀티스레딩
@@ -269,7 +275,7 @@ void beginSD(){
   }
 
   dataFile = SD.open(filename, FILE_WRITE);
-  dataFile.print("Timestamp(ms),AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed\n");
+  dataFile.print("Timestamp(ms),AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed,Buzzer1,Buzzer2\n");
   Serial.println("SD Start");
 }
 
@@ -290,7 +296,9 @@ void saveToSD() {
     dataFile.print(altitude); dataFile.print(",");
     dataFile.print(altitude - height_ini); dataFile.print(",");
     dataFile.print(isLaunched); dataFile.print(",");
-    dataFile.print(isDeployed); dataFile.print("\n");
+    dataFile.print(isDeployed); dataFile.print(",");
+    dataFile.print(Buzzer1); dataFile.print(",");
+    dataFile.print(Buzzer2); dataFile.print("\n");
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
     if (++count >= 10) {
