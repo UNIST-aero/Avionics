@@ -5,7 +5,7 @@ import os
 # 1. 아두이노에서 정의한 구조체와 동일한 포맷 설정 (중요!)
 # I: unsigned int (timestamp), f: float, ?: bool
 # 구조: timestamp(I) + float 9개(9f) + bool 4개(4?)
-struct_format = 'I9f4?'
+struct_format = '<I9f4?'
 struct_size = struct.calcsize(struct_format)
 
 def recover_binary_data(bin_filename, csv_filename):
