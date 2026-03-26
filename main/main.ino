@@ -6,6 +6,7 @@
 #include <math.h>
 #include <Adafruit_BMP280.h>
 
+
 // MPU6050 IMU 센서의 출력 데이터 구조체
 
 struct MPUData{
