@@ -309,23 +309,8 @@ void saveToSD(LogData data) {
   }
 
   if (dataFile) {
-    dataFile.print(data.timestamp); dataFile.print(",");
-    dataFile.print(data.AcX); dataFile.print(",");
-    dataFile.print(data.AcY); dataFile.print(",");
-    dataFile.print(data.AcZ); dataFile.print(",");
-    dataFile.print(data.GyX); dataFile.print(",");
-    dataFile.print(data.GyY); dataFile.print(",");
-    dataFile.print(data.GyZ); dataFile.print(",");
-    dataFile.print(data.Tmp); dataFile.print(",");
-    dataFile.print(data.altitude_abs); dataFile.print(",");
-    dataFile.print(data.altitude_rel); dataFile.print(",");
-    dataFile.print(data.isLaunched); dataFile.print(",");
-    dataFile.print(data.isDeployed); dataFile.print(",");
-    dataFile.print(data.Buzzer1); dataFile.print(",");
-    dataFile.print(data.Buzzer2); dataFile.print("\n");
-
-    // 저장을 최적화하고 싶을 경우, 위 방식 대신 아래처럼 바이너리로 저장, 컴퓨터에서 복구 
-    //dataFile.write((const uint8_t*)&data, sizeof(data));
+    
+    dataFile.write((const uint8_t*)&data, sizeof(data));
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
     if (++count >= 10) {
