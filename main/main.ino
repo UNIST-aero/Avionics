@@ -104,7 +104,7 @@ void setup() {
   Wire.begin(21, 22);
   //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
-  sdQueue = xQueueCreate(20, sizeof(LogData)); //20 보다 크게 하는게 좋을 것 같긴 함. flush가 큰 부하를 주기 때문에, 큐가 넘칠 수도?
+  sdQueue = xQueueCreate(50, sizeof(LogData)); //ESP32의 RAM을 믿는다
   
   servo.attach(SERVO_PIN);
   servo.write(90); 
@@ -284,7 +284,7 @@ void updateMPUData(){
 #pragma region SD
 void beginSD(){
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, CS);
-  if (!SD.begin(CS)) {
+  if (!SD.begin(CS, SPI, 3000000)) { // ESP32는 40MHz까지 안정적
     Serial.println("SD Init Failed");
     while (1); //연결 안 될 경우
   }
