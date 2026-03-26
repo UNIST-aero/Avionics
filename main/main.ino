@@ -26,6 +26,10 @@ Servo servo;
 const int SERVO_PIN = 25;
 #pragma endregion
 
+
+//부저 핀 번호
+const int speakerPin = 35;
+
 #pragma region Task
 // 1. 태스크 핸들러 변수 선언
 TaskHandle_t TaskHandle;
@@ -75,8 +79,11 @@ int fallCount = 0; // 추락 감지 횟수
 bool isLaunched = false; // 발사 여부
 bool isDeployed = false; // 사출 여부
 
-// 부저 핀 정의
-const int buzzerPin = 27;
+bool Buzzer1 = false; // 발사 부저 울림 여부
+bool Buzzer2 = false; // 사출 부저 울림 여부
+
+
+
 
 // 시작 코드
 void setup() {
@@ -88,6 +95,10 @@ void setup() {
   servo.attach(SERVO_PIN);
   servo.write(90); 
 
+  ledcAttachPin(speakerPin, 0);
+  ledcSetup(0, 1000, 8);
+
+
   /*ledcAttach(buzzerPin, 1000, 8);
   ledcWriteTone(buzzerPin, 1000);
   delay(200);
@@ -97,6 +108,8 @@ void setup() {
   beginMPU();
   beginSD();
   beginBmp();
+
+  delay(500);
 
   height_ini = bmp.readAltitude(seaLevelPressure);
 
@@ -124,6 +137,13 @@ void loop() {
       MPUAddr->AcY * MPUAddr->AcY +
       MPUAddr->AcZ * MPUAddr->AcZ
     ); // g 단위로 현재 총 가속도
+    if(isLaunched && !Buzzer1) {
+      ledcWriteTone(speakerPin, 261);
+      delay(1000);
+      ledcWriteTone(speakerPin,0);
+      delay(500);
+      Buzzer1 = true;
+    }
     if (checkHeight(altitude - height_ini, g) && isLaunched && !isDeployed){ // 발사 이후, --번 이상의 추락 감지 시 사출
       Deploy();
     }
@@ -135,6 +155,11 @@ void loop() {
 
 // 사출
 void Deploy() {
+  ledcWriteTone(speakerPin, 261);
+  delay(1000);
+  ledcWriteTone(speakerPin,0);
+  delay(500);
+  
   for(int i = 0; i<3; i++) {
     servo.write(0);
     delay(300);
