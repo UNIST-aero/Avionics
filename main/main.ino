@@ -18,6 +18,7 @@ struct MPUData{
   float GyZ;
 };
 
+#pragma pack(push, 1)
 struct LogData {
   unsigned long timestamp; 
   float AcX, AcY, AcZ; 
@@ -30,7 +31,7 @@ struct LogData {
   bool Buzzer1; 
   bool Buzzer2; 
 };
-
+#pragma pack(pop)
 // MPU6050 기본 I2C 주소
 const int MPU_ADDR = 0x68;
 
