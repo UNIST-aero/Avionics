@@ -28,7 +28,7 @@ const int SERVO_PIN = 25;
 
 
 //부저 핀 번호
-const int speakerPin = 35;
+const int speakerPin = 27;
 
 #pragma region Task
 // 1. 태스크 핸들러 변수 선언
