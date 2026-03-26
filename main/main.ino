@@ -29,7 +29,7 @@ struct LogData {
   bool isDeployed; 
   bool Buzzer1; 
   bool Buzzer2; 
-}
+};
 
 // MPU6050 기본 I2C 주소
 const int MPU_ADDR = 0x68;
@@ -208,7 +208,7 @@ void loggingTask(void *pvParameters) {
 
   while(1) {
     if (xQueueReceive(sdQueue, &receivedData, portMAX_DELAY) == pdPASS) {
-      saveToSD();
+      saveToSD(receivedData);
     }
   }
 }
@@ -304,7 +304,7 @@ void beginSD(){
   Serial.println("SD Start");
 }
 
-void saveToSD() {
+void saveToSD(LogData data) {
   if (!dataFile) {
     dataFile = SD.open(filename, FILE_APPEND);
   }
@@ -318,8 +318,8 @@ void saveToSD() {
     dataFile.print(data.GyY); dataFile.print(",");
     dataFile.print(data.GyZ); dataFile.print(",");
     dataFile.print(data.Tmp); dataFile.print(",");
-    dataFile.print(data.absAltitude); dataFile.print(",");
-    dataFile.print(data.relAltitude); dataFile.print(",");
+    dataFile.print(data.altitude_abs); dataFile.print(",");
+    dataFile.print(data.altitude_rel); dataFile.print(",");
     dataFile.print(data.isLaunched); dataFile.print(",");
     dataFile.print(data.isDeployed); dataFile.print(",");
     dataFile.print(data.Buzzer1); dataFile.print(",");
