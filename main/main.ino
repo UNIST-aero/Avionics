@@ -95,8 +95,7 @@ void setup() {
   servo.attach(SERVO_PIN);
   servo.write(90); 
 
-  ledcAttachPin(speakerPin, 0);
-  ledcSetup(0, 1000, 8);
+  ledcAttach(speakerPin, 1000,8);
 
 
   /*ledcAttach(buzzerPin, 1000, 8);
