@@ -6,8 +6,8 @@
 #include <math.h>
 #include <Adafruit_BMP280.h>
 
-// MPU6050 IMU 센서의 출력 데이터 구조체
 
+// MPU6050 IMU 센서의 출력 데이터 구조체
 struct MPUData{
   float AcX; // X 방향 가속도, g (9.81 m/s^2)
   float AcY; 
@@ -17,6 +17,21 @@ struct MPUData{
   float GyY;
   float GyZ;
 };
+
+#pragma pack(push, 1)
+struct LogData {
+  unsigned long timestamp; 
+  float AcX, AcY, AcZ; 
+  float GyX, GyY, GyZ; 
+  float Tmp; 
+  float altitude_abs; // 절대 고도 (sea level 기준)
+  float altitude_rel; // 상대 고도 (초기 고도 기준)
+  bool isLaunched; 
+  bool isDeployed; 
+  bool Buzzer1; 
+  bool Buzzer2; 
+};
+#pragma pack(pop)
 // MPU6050 기본 I2C 주소
 const int MPU_ADDR = 0x68;
 
@@ -82,7 +97,24 @@ bool isDeployed = false; // 사출 여부
 bool Buzzer1 = false; // 발사 부저 울림 여부
 bool Buzzer2 = false; // 사출 부저 울림 여부
 
+enum BuzzerMode {
+  BUZZER_OFF,
+  BUZZER_PRELAUNCH,
+  BUZZER_LAUNCH,
+  BUZZER_DEPLOY
+};
 
+BuzzerMode buzzerMode = BUZZER_OFF;
+unsigned long buzzerTimer = 0;
+bool buzzerToneOn = false;
+
+bool deployActive = false;
+int deployStep = 0;
+unsigned long deployTimer = 0;
+
+void startBuzzer(BuzzerMode mode);
+void updateBuzzer();
+void updateDeploySequence();
 
 
 // 시작 코드
@@ -90,7 +122,7 @@ void setup() {
   Wire.begin(21, 22);
   //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
-  sdQueue = xQueueCreate(10, msgSize);
+  sdQueue = xQueueCreate(50, sizeof(LogData)); //ESP32의 RAM을 믿는다
   
   servo.attach(SERVO_PIN);
   servo.write(90); 
@@ -129,32 +161,45 @@ void loop() {
     // --- 임계 구역 (Critical Section) 시작 ---
     updateMPUData();
     altitude = bmp.readAltitude(seaLevelPressure);
-
     checklaunch(altitude - height_ini); // 발사 여부 판정
+
     float g = sqrt(
       MPUAddr->AcX * MPUAddr->AcX +
       MPUAddr->AcY * MPUAddr->AcY +
       MPUAddr->AcZ * MPUAddr->AcZ
     ); // g 단위로 현재 총 가속도
-    if(!isLaunched) {
-      ledcWriteTone(speakerPin, 261);
-      delay(100);
-      ledcWriteTone(speakerPin, 0);
-      delay(1000);
-    }
-    if(isLaunched && !Buzzer1) {
+
+    if (isLaunched && !Buzzer1) {
       Buzzer1 = true;
-      ledcWriteTone(speakerPin, 261);
-      delay(1000);
-      ledcWriteTone(speakerPin,0);
-      delay(500);
+      startBuzzer(BUZZER_LAUNCH);
+    } else if (!isLaunched && !Buzzer2) {
+      startBuzzer(BUZZER_PRELAUNCH);
     }
+
     if (checkHeight(altitude - height_ini, g) && isLaunched && !isDeployed){ // 발사 이후, --번 이상의 추락 감지 시 사출
       Deploy();
     }
-    // --- 임계 구역 끝 ---
-    //xSemaphoreGive(xMutex); // 뮤텍스 반납
-  //}
+
+    updateDeploySequence();
+    updateBuzzer();
+
+    LogData sendData;
+    sendData.timestamp = millis();
+    sendData.AcX = MPUAddr->AcX;
+    sendData.AcY = MPUAddr->AcY;
+    sendData.AcZ = MPUAddr->AcZ;
+    sendData.GyX = MPUAddr->GyX;
+    sendData.GyY = MPUAddr->GyY;
+    sendData.GyZ = MPUAddr->GyZ;
+    sendData.Tmp = MPUAddr->Tmp;
+    sendData.altitude_abs = altitude;
+    sendData.altitude_rel = altitude - height_ini;
+    sendData.isLaunched = isLaunched;
+    sendData.isDeployed = isDeployed;
+    sendData.Buzzer1 = Buzzer1;
+    sendData.Buzzer2 = Buzzer2;
+
+    xQueueSend(sdQueue, &sendData, 0); // 데이터 큐에 저장
 }
 
 
@@ -162,29 +207,21 @@ void loop() {
 void Deploy() {
   isDeployed = true;
   Buzzer2 = true;
-  for(int i = 0; i<3; i++) {
-    servo.write(0);
-    delay(300);
-    servo.write(90);
-    delay(300);
-  }
-  ledcWriteTone(speakerPin, 261);
-  delay(1000);
-  ledcWriteTone(speakerPin,0);
-  delay(500);
+  deployActive = true;
+  deployStep = 0;
+  deployTimer = millis();
+  servo.write(0);
+  startBuzzer(BUZZER_DEPLOY);
 }
 
 // 데이터 로깅 멀티스레딩
 void loggingTask(void *pvParameters) {
-  while(1) {
-    //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-      // --- 임계 구역 (Critical Section) 시작 ---
-      saveToSD();
-      // --- 임계 구역 끝 ---
-      //xSemaphoreGive(xMutex); // 뮤텍스 반납
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-    //}
+  LogData receivedData;
 
+  while(1) {
+    if (xQueueReceive(sdQueue, &receivedData, portMAX_DELAY) == pdPASS) {
+      saveToSD(receivedData);
+    }
   }
 }
 
@@ -253,21 +290,20 @@ void updateMPUData(){
   Serial.print(",");
   Serial.print(AngleZ);
   Serial.print("\n");
-
 }
 #pragma endregion
 
 #pragma region SD
 void beginSD(){
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, CS);
-  if (!SD.begin(CS)) {
+  if (!SD.begin(CS, SPI, 30000000)) { // ESP32는 40MHz까지 안정적
     Serial.println("SD Init Failed");
     while (1); //연결 안 될 경우
   }
 
   int fileIndex = 1;
   while (true) {
-    sprintf(filename, "/data%d.csv", fileIndex);
+    sprintf(filename, "/data%d.bin", fileIndex);
     if (!SD.exists(filename)) {
       break;
     }
@@ -275,30 +311,17 @@ void beginSD(){
   }
 
   dataFile = SD.open(filename, FILE_WRITE);
-  dataFile.print("Timestamp(ms),AcX,AcY,AcZ,GyX,GyY,GyZ,Tmp,altitude(abs),altitude(rel),isLaunched,isDeployed,Buzzer1,Buzzer2\n");
   Serial.println("SD Start");
 }
 
-void saveToSD() {
+void saveToSD(LogData data) {
   if (!dataFile) {
     dataFile = SD.open(filename, FILE_APPEND);
   }
 
   if (dataFile) {
-    dataFile.print(millis()); dataFile.print(",");
-    dataFile.print(MPUAddr->AcX); dataFile.print(",");
-    dataFile.print(MPUAddr->AcY); dataFile.print(",");
-    dataFile.print(MPUAddr->AcZ); dataFile.print(",");
-    dataFile.print(MPUAddr->GyX); dataFile.print(",");
-    dataFile.print(MPUAddr->GyY); dataFile.print(",");
-    dataFile.print(MPUAddr->GyZ); dataFile.print(",");
-    dataFile.print(MPUAddr->Tmp); dataFile.print(",");
-    dataFile.print(altitude); dataFile.print(",");
-    dataFile.print(altitude - height_ini); dataFile.print(",");
-    dataFile.print(isLaunched); dataFile.print(",");
-    dataFile.print(isDeployed); dataFile.print(",");
-    dataFile.print(Buzzer1); dataFile.print(",");
-    dataFile.print(Buzzer2); dataFile.print("\n");
+    
+    dataFile.write((const uint8_t*)&data, sizeof(data));
 
     static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
     if (++count >= 10) {
@@ -358,5 +381,80 @@ bool checkHeight(float h, float g) {
     return true;
   }
   return false;
+}
+
+void startBuzzer(BuzzerMode mode) {
+  if (buzzerMode == mode) {
+    return;
+  }
+
+  buzzerMode = mode;
+  buzzerTimer = millis();
+  buzzerToneOn = false;
+
+  if (mode == BUZZER_LAUNCH || mode == BUZZER_DEPLOY) {
+    ledcWriteTone(speakerPin, 261);
+    buzzerToneOn = true;
+  } else {
+    ledcWriteTone(speakerPin, 0);
+  }
+}
+
+void updateBuzzer() {
+  unsigned long now = millis();
+
+  switch (buzzerMode) {
+    case BUZZER_OFF:
+      ledcWriteTone(speakerPin, 0);
+      break;
+
+    case BUZZER_PRELAUNCH:
+      if (buzzerToneOn) {
+        if (now - buzzerTimer >= 100) {
+          ledcWriteTone(speakerPin, 0);
+          buzzerToneOn = false;
+          buzzerTimer = now;
+        }
+      } else if (now - buzzerTimer >= 1000) {
+        ledcWriteTone(speakerPin, 261);
+        buzzerToneOn = true;
+        buzzerTimer = now;
+      }
+      break;
+
+    case BUZZER_LAUNCH:
+    case BUZZER_DEPLOY:
+      if (now - buzzerTimer >= 1000) {
+        ledcWriteTone(speakerPin, 0);
+        buzzerMode = BUZZER_OFF;
+        buzzerToneOn = false;
+      }
+      break;
+  }
+}
+
+void updateDeploySequence() {
+  if (!deployActive) {
+    return;
+  }
+
+  if (millis() - deployTimer < 300) {
+    return;
+  }
+
+  deployTimer = millis();
+  deployStep++;
+
+  if (deployStep >= 6) {
+    servo.write(90);
+    deployActive = false;
+    return;
+  }
+
+  if (deployStep % 2 == 1) {
+    servo.write(90);
+  } else {
+    servo.write(0);
+  }
 }
 #pragma endregion
