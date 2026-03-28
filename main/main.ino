@@ -260,9 +260,9 @@ void updateMPUData(){
 #pragma region SD
 void beginSD(){
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, CS);
-  if (!SD.begin(CS)) {
+  while (!SD.begin(CS)) {
     Serial.println("SD Init Failed");
-    while (1); //연결 안 될 경우
+    delay(1000); //sd플래시 도중에 아마 전원 껐다 끄면 시스템 파일 손상돼서 문제 생기는 듯. 안정화를 위한 시간 
   }
 
   int fileIndex = 1;
