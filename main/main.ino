@@ -88,6 +88,8 @@ bool Buzzer2 = false; // 사출 부저 울림 여부
 // 시작 코드
 void setup() {
   Wire.begin(21, 22);
+  Wire.setClock(400000);
+  
   //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
   sdQueue = xQueueCreate(10, msgSize);
@@ -260,7 +262,7 @@ void updateMPUData(){
 #pragma region SD
 void beginSD(){
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, CS);
-  while (!SD.begin(CS)) {
+  while (!SD.begin(CS, SPI, 30000000)) {// ESP32는 40MHz까지 안정적
     Serial.println("SD Init Failed");
     delay(1000); //sd플래시 도중에 아마 전원 껐다 끄면 시스템 파일 손상돼서 문제 생기는 듯. 안정화를 위한 시간 
   }
