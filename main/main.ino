@@ -85,7 +85,10 @@ float AngleZ = 0;
 // 마지막으로 IMU에서 값을 불러온 시점(millis 기준)
 unsigned long last_ms_imu = 0;
 
-const float LAUNCH_THRESHOLD = 35; // 사출 기준 고도 (m, 원래 값 : 35)
+// 마지막으로 loop()를 수행한 시점
+static unsigned long lastLoop = 0;
+
+const float LAUNCH_THRESHOLD = 10; // 사출 기준 고도 (m, 원래 값 : 35)
 const float FALL_MARGIN = 7; // 최고 고도 기준 추락 허용 고도 (m, 원래 값 : 7) -> 최고 고도 기준 --m 이상 하강 시 사출 조건 충족
 const int COUNT_LIMIT = 50; // 최고 고도 기준 추락이 --번 감지되면 사출 조건 충족(원래 값 : 200)
 
@@ -157,7 +160,11 @@ void setup() {
   );
 }
 
+
+
 void loop() {
+  if (millis() - lastLoop < 10) return;
+  lastLoop = millis();
   //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
     // --- 임계 구역 (Critical Section) 시작 ---
     updateMPUData();
