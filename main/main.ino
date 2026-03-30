@@ -124,6 +124,7 @@ void updateDeploySequence();
 void setup() {
   Wire.begin(21, 22);
   Wire.setClock(400000);
+
   //xMutex = xSemaphoreCreateMutex();
   Serial.begin(115200);
   sdQueue = xQueueCreate(50, sizeof(LogData)); //ESP32의 RAM을 믿는다
@@ -159,8 +160,6 @@ void setup() {
     0                // 코어 번호
   );
 }
-
-
 
 void loop() {
   if (millis() - lastLoop < 10) return;
@@ -465,4 +464,5 @@ void updateDeploySequence() {
     servo.write(0);
   }
 }
+
 #pragma endregion
