@@ -6,6 +6,8 @@
 #include <math.h>
 #include <Adafruit_BMP280.h>
 
+TickType_t xLastWakeTime;
+const TickType_t xFrequency = 10;
 
 // MPU6050 IMU 센서의 출력 데이터 구조체
 struct MPUData{
@@ -159,11 +161,11 @@ void setup() {
     &TaskHandle,   // 핸들러 연결
     0                // 코어 번호
   );
+  xLastWakeTime = xTaskGetTickCount();
 }
 
 void loop() {
-  if (millis() - lastLoop < 10) return;
-  lastLoop = millis();
+  
   //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
     // --- 임계 구역 (Critical Section) 시작 ---
     updateMPUData();
@@ -207,6 +209,8 @@ void loop() {
     sendData.Buzzer2 = Buzzer2;
 
     xQueueSend(sdQueue, &sendData, 0); // 데이터 큐에 저장
+  
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
 }
 
 
