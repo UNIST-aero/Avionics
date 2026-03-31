@@ -330,11 +330,6 @@ void saveToSD(LogData data) {
     
     dataFile.write((const uint8_t*)&data, sizeof(data));
 
-    static int count = 0; // 올라 갈 때, 내려 갈 때, 버퍼 간격 바꾸기
-    if (++count >= 10) {
-      dataFile.flush();
-      count = 0;
-    }
   }
 }
 #pragma endregion
