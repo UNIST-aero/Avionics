@@ -168,13 +168,14 @@ void loop() {
     // --- 임계 구역 (Critical Section) 시작 ---
     updateMPUData();
     altitude = bmp.readAltitude(seaLevelPressure);
-    checklaunch(altitude - height_ini); // 발사 여부 판정
-
+  
     float g = sqrt(
       MPUAddr->AcX * MPUAddr->AcX +
       MPUAddr->AcY * MPUAddr->AcY +
       MPUAddr->AcZ * MPUAddr->AcZ
     ); // g 단위로 현재 총 가속도
+  
+    checklaunch(altitude - height_ini, g); // 발사 여부 판정
 
     if (isLaunched && !Buzzer1) {
       Buzzer1 = true;
@@ -365,8 +366,8 @@ void beginBmp(){
 
 #pragma region Utility
 // 발사 감지
-void checklaunch(float h) {
-  if(!isLaunched && (h > LAUNCH_THRESHOLD)) {
+void checklaunch(float h, float g) {
+  if(!isLaunched && ((h > LAUNCH_THRESHOLD) || g > 2.0)) {
     isLaunched = true;
   }
 }
